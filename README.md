@@ -1,4 +1,12 @@
-FreeTV
-Two files in a .zip archive. Run the html file and the python backend populates the programming. Tons of channels available. 
+FREE.TV
+Free live TV in your browser. No account, no install, no ads.
+Usage
+Open free_tv.html in Chrome or Firefox. Click a source button, pick a channel.
+↑↓ to navigate · / to search · click to tune.
+Files
 
-Note: some streams will be geo-restricted or intermittently offline — that's the nature of free public IPTV. Just try another channel.
+free_tv.html — the player. Open this.
+build_tv.py — optional. Run with python3 build_tv.py to pre-fetch channels into the HTML for offline use.
+
+Sources
+Streams from iptv-org and Free-TV. Some streams are geo-restricted and may not play in all regions.

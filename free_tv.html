@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FREE.TV — Live Channels</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+<style>
+:root {
+  --bg: #080810;
+  --panel: #0f0f1a;
+  --card: #16162a;
+  --border: #252540;
+  --accent: #00e5ff;
+  --accent2: #a855f7;
+  --text: #dde0f5;
+  --muted: #555580;
+  --green: #00ff88;
+  --red: #ff4466;
+  --active-bg: rgba(0,229,255,0.08);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: 'Courier New', 'Lucida Console', monospace; overflow: hidden; }
+#app { display: grid; grid-template-rows: 68px 1fr; grid-template-columns: 340px 1fr; height: 100vh; }
+#topbar { grid-column: 1/-1;
+  background: linear-gradient(90deg, #0a0020 0%, #1a0050 20%, #0d1a60 40%, #003060 60%, #001a40 80%, #0a0020 100%);
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--accent2), var(--accent), var(--accent2)) 1;
+  box-shadow: 0 2px 30px rgba(0,229,255,0.15), inset 0 -1px 0 rgba(168,85,247,0.3);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px; }
+#sidebar { background: var(--panel); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; }
+#main { display: flex; flex-direction: column; overflow: hidden; background: #000; }
+
+/* topbar */
+.logo { font-size: 26px; font-weight: bold; letter-spacing: 6px; white-space: nowrap;
+  background: linear-gradient(90deg, #00e5ff, #a855f7, #00e5ff);
+  background-size: 200% auto;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  animation: shimmer 4s linear infinite;
+  filter: drop-shadow(0 0 12px rgba(0,229,255,0.6)); }
+@keyframes shimmer { 0%{background-position:0%} 100%{background-position:200%} }
+.logo em { font-style: normal; }
+.pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 12px var(--green); animation: blink 2s infinite; flex-shrink: 0; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.2;} }
+.meta { font-size: 10px; color: var(--muted); flex: 1; }
+#search { background: var(--card); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 12px; border-radius: 3px; font-family: inherit; font-size: 12px;
+  width: 190px; outline: none; transition: border-color .2s; }
+#search:focus { border-color: var(--accent); }
+#search::placeholder { color: var(--muted); }
+#sig-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+#sig-dot.live  { background: var(--green); box-shadow: 0 0 10px var(--green); animation: blink 1.5s infinite; }
+#sig-dot.error { background: var(--red); }
+#sig-dot.load  { background: var(--accent); animation: blink .5s infinite; }
+#sig-label { font-size: 10px; color: var(--muted); width: 85px; }
+
+/* source buttons */
+#source-bar { display: flex; gap: 5px; padding: 8px 10px; border-bottom: 1px solid var(--border);
+  flex-wrap: wrap; flex-shrink: 0; }
+.src-btn { background: transparent; border: 1px solid var(--border); color: var(--muted);
+  padding: 3px 9px; border-radius: 3px; cursor: pointer; font-size: 10px;
+  font-family: inherit; transition: all .15s; }
+.src-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+.src-btn.loaded { border-color: var(--accent2); color: var(--accent2); }
+.src-btn.loading { border-color: var(--accent); color: var(--accent); animation: blink .5s infinite; }
+.src-btn.failed { border-color: var(--red); color: var(--red); }
+
+/* group filter */
+#group-bar { display: flex; gap: 4px; padding: 6px 8px; overflow-x: auto;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; scrollbar-width: none; }
+#group-bar::-webkit-scrollbar { display: none; }
+.grp { background: transparent; border: 1px solid var(--border); color: var(--muted);
+  padding: 2px 9px; border-radius: 20px; cursor: pointer; font-size: 10px;
+  font-family: inherit; white-space: nowrap; transition: all .15s; }
+.grp:hover { border-color: var(--accent); color: var(--accent); }
+.grp.on { background: var(--accent); border-color: var(--accent); color: #000; font-weight: bold; }
+
+/* channel search in sidebar */
+#ch-search-wrap { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; position: relative; }
+#ch-search-wrap::before { content: '⌕'; position: absolute; left: 19px; top: 50%;
+  transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
+#ch-search { width: 100%; background: var(--card); border: 1px solid var(--border);
+  color: var(--text); padding: 6px 10px 6px 28px; border-radius: 3px;
+  font-family: inherit; font-size: 12px; outline: none; transition: border-color .2s; }
+#ch-search:focus { border-color: var(--accent); }
+#ch-search::placeholder { color: var(--muted); }
+
+/* channel list */
+#ch-count { padding: 5px 12px; font-size: 10px; color: var(--muted);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; letter-spacing: .5px; }
+#ch-list { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+#ch-list::-webkit-scrollbar { width: 4px; }
+#ch-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.ch { display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+  cursor: pointer; border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background .1s, border-left-color .1s; }
+.ch:hover { background: var(--card); }
+.ch.on { background: var(--active-bg); border-left-color: var(--accent); }
+.ch-num { font-size: 10px; color: var(--muted); width: 24px; text-align: right;
+  flex-shrink: 0; opacity: .6; }
+.ch-logo { width: 40px; height: 30px; object-fit: contain; flex-shrink: 0;
+  background: rgba(255,255,255,0.04); border-radius: 3px; padding: 2px; }
+.ch-ph { width: 40px; height: 30px; background: rgba(255,255,255,0.04); border-radius: 3px;
+  display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.ch-info { flex: 1; min-width: 0; }
+.ch-name { font-size: 13px; font-weight: 500; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; color: var(--text); line-height: 1.3; }
+.ch-grp  { font-size: 10px; color: var(--muted); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .3px; }
+.ch.on .ch-name { color: var(--accent); }
+.ch-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.8; }
+
+/* player */
+#player-wrap { flex: 1; position: relative; background: #000; }
+video { width: 100%; height: 100%; display: block; object-fit: contain; }
+#overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  background: radial-gradient(ellipse at center, #0d0d20 0%, #000 100%); }
+#overlay.gone { display: none; }
+.ov-icon  { font-size: 52px; }
+.ov-title { font-size: 22px; color: var(--accent); letter-spacing: 5px; font-weight: bold;
+  text-shadow: 0 0 30px rgba(0,229,255,0.4); }
+.ov-sub   { font-size: 11px; color: var(--muted); text-align: center; max-width: 340px; line-height: 1.7; }
+.ov-hint  { font-size: 10px; color: var(--border); }
+#prog { position: absolute; bottom: 0; left: 0; height: 2px;
+  background: linear-gradient(90deg,var(--accent2),var(--accent));
+  width: 0; transition: width .4s; }
+
+/* now bar */
+#now-bar { background: var(--panel); border-top: 1px solid var(--border);
+  padding: 5px 16px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+#np-name { font-size: 12px; color: var(--accent); flex: 2; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+#np-grp  { font-size: 10px; color: var(--muted); flex: 1; white-space: nowrap; }
+#np-url  { font-size: 9px; color: var(--border); flex: 3; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+
+/* toast */
+#toast { position: fixed; bottom: 52px; right: 16px; background: #1a0a10;
+  border: 1px solid var(--red); color: var(--red); padding: 7px 14px; border-radius: 3px;
+  font-size: 11px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999;
+  max-width: 300px; }
+#toast.on { opacity: 1; }
+.retry { background: transparent; border: 1px solid var(--accent); color: var(--accent);
+  padding: 6px 20px; border-radius: 2px; cursor: pointer; font-family: inherit;
+  font-size: 11px; letter-spacing: 2px; text-transform: uppercase; transition: all .15s; }
+.retry:hover { background: var(--accent); color: #000; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="logo">FREE<em>.</em>TV</div>
+    <div class="pulse"></div>
+    <div class="meta" id="top-meta">Select a source to load channels</div>
+    <input id="search" type="search" placeholder="/ to search…" autocomplete="off">
+    <div id="sig-dot"></div>
+    <div id="sig-label">idle</div>
+  </div>
+
+  <div id="sidebar">
+    <div id="source-bar"></div>
+    <div id="ch-search-wrap">
+      <input id="ch-search" type="search" placeholder="Search channels…" autocomplete="off">
+    </div>
+    <div id="group-bar"><button class="grp on" data-g="ALL">ALL</button></div>
+    <div id="ch-count"></div>
+    <div id="ch-list"><div class="ch-empty">📡 Click a source above<br>to load live channels.</div></div>
+  </div>
+
+  <div id="main">
+    <div id="player-wrap">
+      <video id="vid" controls playsinline></video>
+      <div id="overlay">
+        <div class="ov-icon">📡</div>
+        <div class="ov-title">FREE.TV</div>
+        <div class="ov-sub">
+          Free public live TV via iptv-org and Free-TV projects.<br>
+          Click a source button, then select a channel.
+        </div>
+        <div class="ov-hint">↑↓ navigate · / search · click to tune</div>
+      </div>
+      <div id="prog"></div>
+    </div>
+    <div id="now-bar">
+      <div id="np-name">No channel selected</div>
+      <div id="np-grp"></div>
+      <div id="np-url"></div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const SOURCES = [
+  { id:"us",    label:"🇺🇸 USA",     url:"https://iptv-org.github.io/iptv/countries/us.m3u" },
+  { id:"news",  label:"📰 News",     url:"https://iptv-org.github.io/iptv/categories/news.m3u" },
+  { id:"sport", label:"⚽ Sports",   url:"https://iptv-org.github.io/iptv/categories/sports.m3u" },
+  { id:"music", label:"🎵 Music",    url:"https://iptv-org.github.io/iptv/categories/music.m3u" },
+  { id:"movie", label:"🎬 Movies",   url:"https://iptv-org.github.io/iptv/categories/movies.m3u" },
+  { id:"freetv",label:"🌍 Free-TV",  url:"https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
+];
+
+let channels = [], filtered = [], currentCh = null, hls = null, activeGroup = "ALL";
+const loaded = new Set();
+
+const chSearch = document.getElementById("ch-search");
+
+const chList   = document.getElementById("ch-list");
+const chCount  = document.getElementById("ch-count");
+const searchEl = document.getElementById("search");
+const groupBar = document.getElementById("group-bar");
+const srcBar   = document.getElementById("source-bar");
+const overlay  = document.getElementById("overlay");
+const prog     = document.getElementById("prog");
+const npName   = document.getElementById("np-name");
+const npGrp    = document.getElementById("np-grp");
+const npUrl    = document.getElementById("np-url");
+const sigDot   = document.getElementById("sig-dot");
+const sigLabel = document.getElementById("sig-label");
+const topMeta  = document.getElementById("top-meta");
+const toast    = document.getElementById("toast");
+
+// Build source buttons
+SOURCES.forEach(src => {
+  const btn = document.createElement("button");
+  btn.className = "src-btn";
+  btn.textContent = src.label;
+  btn.addEventListener("click", () => loadSrc(src, btn));
+  srcBar.appendChild(btn);
+});
+
+function parseM3U(text) {
+  const res = [];
+  if (!text || !text.trim().startsWith("#EXTM3U")) return res;
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line.startsWith("#EXTINF")) continue;
+    const ch = { name:"Unknown", logo:"", group:"General", url:"" };
+    for (const [, k, v] of line.matchAll(/([\w-]+)="([^"]*)"/g)) {
+      const kl = k.toLowerCase();
+      if (kl === "tvg-name"    && v.trim()) ch.name  = v.trim();
+      if (kl === "tvg-logo")               ch.logo  = v.trim();
+      if (kl === "group-title" && v.trim()) ch.group = v.trim();
+    }
+    const ci = line.lastIndexOf(",");
+    if (ci !== -1) { const n = line.slice(ci+1).trim(); if (n && ch.name === "Unknown") ch.name = n; }
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim().startsWith("#")) j++;
+    if (j < lines.length) {
+      const u = lines[j].trim();
+      if (u.startsWith("http") || u.startsWith("rtmp")) { ch.url = u; i = j; }
+    }
+    if (ch.url && (ch.url.includes(".m3u8") || ch.url.includes("m3u8") || ch.url.endsWith(".mp4")))
+      res.push(ch);
+  }
+  return res;
+}
+
+async function loadSrc(src, btn) {
+  if (btn.classList.contains("loading")) return;
+  btn.className = "src-btn loading";
+  btn.textContent = "⟳ " + src.label;
+  try {
+    const res = await fetch(src.url, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    const parsed = parseM3U(text);
+    if (parsed.length === 0) throw new Error("0 HLS channels found");
+    const existUrls = new Set(channels.map(c => c.url));
+    channels = channels.concat(parsed.filter(c => !existUrls.has(c.url)));
+    channels.sort((a,b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+    loaded.add(src.id);
+    btn.className = "src-btn loaded";
+    btn.textContent = "✓ " + src.label;
+    topMeta.textContent = channels.length + " channels · " + loaded.size + " source" + (loaded.size>1?"s":"") + " loaded";
+    rebuildGroups();
+    applyFilters();
+  } catch (err) {
+    btn.className = "src-btn failed";
+    btn.textContent = "✗ " + src.label;
+    showToast(src.label + ": " + err.message);
+    setTimeout(() => { btn.className = "src-btn"; btn.textContent = src.label; }, 4000);
+  }
+}
+
+function rebuildGroups() {
+  const groups = [...new Set(channels.map(c => c.group))].sort();
+  groupBar.innerHTML = `<button class="grp${activeGroup==="ALL"?" on":""}" data-g="ALL">ALL</button>`;
+  groups.forEach(g => {
+    const b = document.createElement("button");
+    b.className = "grp" + (activeGroup===g?" on":"");
+    b.dataset.g = g;
+    b.textContent = g;
+    groupBar.appendChild(b);
+  });
+}
+
+groupBar.addEventListener("click", e => {
+  const b = e.target.closest(".grp");
+  if (!b) return;
+  document.querySelectorAll(".grp").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  activeGroup = b.dataset.g;
+  applyFilters();
+});
+
+searchEl.addEventListener("input", applyFilters);
+chSearch.addEventListener("input", applyFilters);
+
+function applyFilters() {
+  const q = (chSearch.value || searchEl.value).toLowerCase().trim();
+  filtered = channels.filter(c =>
+    (activeGroup==="ALL" || c.group===activeGroup) &&
+    (!q || c.name.toLowerCase().includes(q) || c.group.toLowerCase().includes(q))
+  );
+  renderList();
+}
+
+function renderList() {
+  chCount.textContent = filtered.length + " channel" + (filtered.length!==1?"s":"");
+  if (filtered.length === 0) {
+    chList.innerHTML = channels.length===0
+      ? `<div class="ch-empty">📡 Click a source button above<br>to load live channels.</div>`
+      : `<div class="ch-empty">No channels match.</div>`;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  filtered.forEach((ch, i) => {
+    const d = document.createElement("div");
+    d.className = "ch" + (ch===currentCh?" on":"");
+    d.innerHTML =
+      `<div class="ch-num">${i+1}</div>` +
+      (ch.logo
+        ? `<img class="ch-logo" src="${esc(ch.logo)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ch-ph>📺</div>'">`
+        : `<div class="ch-ph">📺</div>`) +
+      `<div class="ch-info"><div class="ch-name">${esc(ch.name)}</div><div class="ch-grp">${esc(ch.group)}</div></div>`;
+    d.addEventListener("click", () => tune(ch, d));
+    frag.appendChild(d);
+  });
+  chList.innerHTML = "";
+  chList.appendChild(frag);
+}
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function tune(ch, el) {
+  currentCh = ch;
+  document.querySelectorAll(".ch").forEach(x=>x.classList.remove("on"));
+  if (el) el.classList.add("on");
+  overlay.classList.add("gone");
+  npName.textContent = ch.name;
+  npGrp.textContent  = ch.group;
+  npUrl.textContent  = ch.url;
+  setSig("load","connecting…");
+  prog.style.width = "20%";
+
+  if (hls) { hls.destroy(); hls=null; }
+  vid.pause();
+  vid.removeAttribute("src");
+  vid.load();
+
+  if (ch.url.includes(".m3u8") || ch.url.includes("m3u8")) {
+    if (typeof Hls !== "undefined" && Hls.isSupported()) {
+      hls = new Hls({ enableWorker:true, lowLatencyMode:false, maxBufferLength:30 });
+      hls.loadSource(ch.url);
+      hls.attachMedia(vid);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        vid.play().catch(()=>{});
+        prog.style.width="100%";
+        setTimeout(()=>{prog.style.width="0";},700);
+      });
+      hls.on(Hls.Events.ERROR, (e, data) => { if (data.fatal) { setSig("error","error"); showErr(ch); } });
+    } else if (vid.canPlayType("application/vnd.apple.mpegurl")) {
+      vid.src = ch.url; vid.play().catch(()=>{});
+    }
+  } else {
+    vid.src = ch.url; vid.play().catch(()=>{});
+  }
+
+  vid.onplaying = () => setSig("live","▶ LIVE");
+  vid.onwaiting = () => setSig("load","buffering…");
+  vid.onerror   = () => { setSig("error","error"); showErr(ch); };
+}
+
+function showErr(ch) {
+  overlay.classList.remove("gone");
+  overlay.innerHTML = `
+    <div class="ov-icon">⚠️</div>
+    <div class="ov-title" style="font-size:16px;color:var(--red)">SIGNAL LOST</div>
+    <div class="ov-sub">${esc(ch.name)}<br>Stream offline or geo-restricted. Try another channel.</div>
+    <button class="retry" onclick="tune(currentCh)">↻ RETRY</button>`;
+}
+
+function setSig(state, label) {
+  sigDot.className = "";
+  if (state==="live")  sigDot.classList.add("live");
+  if (state==="error") sigDot.classList.add("error");
+  if (state==="load")  sigDot.classList.add("load");
+  sigLabel.textContent = label;
+}
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add("on");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>toast.classList.remove("on"), 5000);
+}
+
+document.addEventListener("keydown", e => {
+  if (e.target === searchEl || e.target === chSearch) return;
+  if (e.key === "/") { e.preventDefault(); chSearch.focus(); return; }
+  if (e.key==="ArrowUp"||e.key==="ArrowDown") {
+    e.preventDefault();
+    const items = [...chList.querySelectorAll(".ch")];
+    const ai = items.findIndex(x=>x.classList.contains("on"));
+    let ni = e.key==="ArrowDown" ? ai+1 : ai-1;
+    if (ni<0) ni=items.length-1;
+    if (ni>=items.length) ni=0;
+    if (items[ni]) { items[ni].click(); items[ni].scrollIntoView({block:"nearest"}); }
+  }
+});
+
+// Auto-load USA + News on start
+window.addEventListener("load", () => {
+  const btns = [...srcBar.querySelectorAll(".src-btn")];
+  [0,1].forEach((i,d) => { if (btns[i]) setTimeout(()=>btns[i].click(), d*300); });
+});
+</script>
+</body>
+</html>
